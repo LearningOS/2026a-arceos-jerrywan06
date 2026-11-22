@@ -8,6 +8,7 @@ use axtask::current;
 use axtask::TaskExtRef;
 use axhal::paging::MappingFlags;
 use arceos_posix_api as api;
+use memory_addr::{MemoryAddr, VirtAddr, VirtAddrRange, PAGE_SIZE_4K};
 
 const SYS_IOCTL: usize = 29;
 const SYS_OPENAT: usize = 56;
@@ -66,7 +67,7 @@ impl From<MmapProt> for MappingFlags {
             flags |= MappingFlags::READ;
         }
         if value.contains(MmapProt::PROT_WRITE) {
-            flags |= MappingFlags::WRITE;
+            flags |= MappingFlags::READ | MappingFlags::WRITE;
         }
         if value.contains(MmapProt::PROT_EXEC) {
             flags |= MappingFlags::EXECUTE;
@@ -131,16 +132,66 @@ fn handle_syscall(tf: &TrapFrame, syscall_num: usize) -> isize {
     ret
 }
 
-#[allow(unused_variables)]
 fn sys_mmap(
     addr: *mut usize,
     length: usize,
     prot: i32,
     flags: i32,
     fd: i32,
-    _offset: isize,
+    offset: isize,
 ) -> isize {
-    unimplemented!("no sys_mmap!");
+    syscall_body!(sys_mmap, {
+        let prot = MmapProt::from_bits(prot).ok_or(LinuxError::EINVAL)?;
+        let flags = MmapFlags::from_bits(flags).ok_or(LinuxError::EINVAL)?;
+        if length == 0 || offset < 0 || offset as usize % PAGE_SIZE_4K != 0 {
+            return Err(LinuxError::EINVAL);
+        }
+        if prot.is_empty() || !flags.contains(MmapFlags::MAP_PRIVATE)
+            || flags.intersects(MmapFlags::MAP_SHARED | MmapFlags::MAP_FIXED)
+        {
+            return Err(LinuxError::EOPNOTSUPP);
+        }
+        let size = length.checked_add(PAGE_SIZE_4K - 1).ok_or(LinuxError::ENOMEM)?
+            & !(PAGE_SIZE_4K - 1);
+        let file = if flags.contains(MmapFlags::MAP_ANONYMOUS) {
+            None
+        } else {
+            Some(api::PosixFile::from_fd(fd)?)
+        };
+
+        let curr = current();
+        let mut aspace = curr.task_ext().aspace.lock();
+        // Keep the first page unmapped so a null pointer is never a valid mapping.
+        let limit = VirtAddrRange::new(aspace.base().max(VirtAddr::from(PAGE_SIZE_4K)), aspace.end());
+        let hint = VirtAddr::from(addr as usize).align_down_4k();
+        let start = aspace
+            .find_free_area(hint, size, limit)
+            .or_else(|| aspace.find_free_area(limit.start, size, limit))
+            .ok_or(LinuxError::ENOMEM)?;
+        aspace.map_alloc(start, size, prot.into(), true)?;
+
+        if let Some(file) = file {
+            let result = (|| -> axerrno::LinuxResult<()> {
+                let mut buf = [0; PAGE_SIZE_4K];
+                let mut copied = 0;
+                while copied < size {
+                    let chunk = (size - copied).min(buf.len());
+                    let n = file.read_at(offset as u64 + copied as u64, &mut buf[..chunk])?;
+                    if n == 0 {
+                        break; // Unread space already contains zeros.
+                    }
+                    aspace.write(start + copied, &buf[..n])?;
+                    copied += n;
+                }
+                Ok(())
+            })();
+            if let Err(error) = result {
+                aspace.unmap_alloc(start, size)?;
+                return Err(error);
+            }
+        }
+        Ok(start.as_usize())
+    })
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {

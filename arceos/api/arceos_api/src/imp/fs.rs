@@ -11,6 +11,8 @@ pub use axio::SeekFrom as AxSeekFrom;
 
 #[cfg(feature = "myfs")]
 pub use axfs::fops::{Disk as AxDisk, MyFileSystemIf};
+#[cfg(feature = "myfs")]
+pub use axfs::ramfs::RamFileSystem;
 
 /// A handle to an opened file.
 pub struct AxFileHandle(File);

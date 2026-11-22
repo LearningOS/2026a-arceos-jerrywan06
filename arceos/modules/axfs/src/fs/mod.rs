@@ -9,5 +9,10 @@ cfg_if::cfg_if! {
 #[cfg(feature = "devfs")]
 pub use axfs_devfs as devfs;
 
-#[cfg(feature = "ramfs")]
-pub use axfs_ramfs as ramfs;
+#[cfg(any(feature = "ramfs", feature = "procfs", feature = "sysfs", feature = "myfs"))]
+use axsync::spin::SpinNoIrq as RamFsMutex;
+
+// Share the in-tree implementation with the standalone RAM filesystem crate.
+#[cfg(any(feature = "ramfs", feature = "procfs", feature = "sysfs", feature = "myfs"))]
+#[path = "../../../../axfs_ramfs/src/fs.rs"]
+pub mod ramfs;

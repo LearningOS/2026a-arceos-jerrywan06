@@ -45,11 +45,13 @@ impl Backend {
             for addr in PageIter4K::new(start, start + size).unwrap() {
                 if let Some(frame) = alloc_frame(true) {
                     if let Ok(tlb) = pt.map(addr, frame, PageSize::Size4K, flags) {
-                        tlb.ignore(); // TLB flush on map is unnecessary, as there are no outdated mappings.
-                    } else {
-                        return false;
+                        tlb.ignore(); // Newly mapped pages have no stale translations.
+                        continue;
                     }
+                    dealloc_frame(frame);
                 }
+                self.unmap_alloc(start, addr - start, pt, true);
+                return false;
             }
             true
         } else {

@@ -190,6 +190,8 @@ pub mod fs {
         pub type AxDisk;
         #[cfg(feature = "myfs")]
         pub type MyFileSystemIf;
+        #[cfg(feature = "myfs")]
+        pub type RamFileSystem;
     }
 
     define_api! {

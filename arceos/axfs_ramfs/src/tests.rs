@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use axfs_vfs::{VfsError, VfsNodeType, VfsResult};
+use axfs_vfs::{VfsError, VfsNodeType, VfsOps, VfsResult};
 
-use crate::*;
+use crate::RamFileSystem;
 
 fn test_ramfs_ops(devfs: &RamFileSystem) -> VfsResult {
     const N: usize = 32;

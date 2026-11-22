@@ -177,6 +177,16 @@ impl AddrSpace {
         Ok(())
     }
 
+    /// Removes allocation-backed mappings and releases their physical pages.
+    pub fn unmap_alloc(&mut self, start: VirtAddr, size: usize) -> AxResult {
+        if !start.is_aligned_4k() || !is_aligned_4k(size) || !self.contains_range(start, size) {
+            return ax_err!(InvalidInput);
+        }
+        self.areas
+            .unmap(start, size, &mut self.pt)
+            .map_err(mapping_err_to_ax_err)
+    }
+
     /// To process data in this area with the given function.
     ///
     /// Now it supports reading and writing data in the given interval.

@@ -24,11 +24,17 @@ impl File {
         super::fd_ops::add_file_like(Arc::new(self))
     }
 
-    fn from_fd(fd: c_int) -> LinuxResult<Arc<Self>> {
+    /// Gets the file associated with an open descriptor.
+    pub fn from_fd(fd: c_int) -> LinuxResult<Arc<Self>> {
         let f = super::fd_ops::get_file_like(fd)?;
         f.into_any()
             .downcast::<Self>()
             .map_err(|_| LinuxError::EINVAL)
+    }
+
+    /// Reads at the given offset without changing the descriptor's file position.
+    pub fn read_at(&self, offset: u64, buf: &mut [u8]) -> LinuxResult<usize> {
+        Ok(self.inner.lock().read_at(offset, buf)?)
     }
 }
 

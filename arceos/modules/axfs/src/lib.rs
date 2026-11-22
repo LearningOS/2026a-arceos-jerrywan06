@@ -8,7 +8,7 @@
 //!    is **enabled** by default.
 //! - `devfs`: Mount [`axfs_devfs::DeviceFileSystem`] on `/dev`. This feature is
 //!    **enabled** by default.
-//! - `ramfs`: Mount [`axfs_ramfs::RamFileSystem`] on `/tmp`. This feature is
+//! - `ramfs`: Mount [`ramfs::RamFileSystem`] on `/tmp`. This feature is
 //!    **enabled** by default.
 //! - `myfs`: Allow users to define their custom filesystems to override the
 //!    default. In this case, [`MyFileSystemIf`] is required to be implemented
@@ -33,6 +33,9 @@ mod root;
 
 pub mod api;
 pub mod fops;
+
+#[cfg(any(feature = "ramfs", feature = "procfs", feature = "sysfs", feature = "myfs"))]
+pub use fs::ramfs;
 
 use axdriver::{prelude::*, AxDeviceContainer};
 
